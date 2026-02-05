@@ -8,7 +8,12 @@ const path = require('path');
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 // Database connection
 const pool = new Pool({
@@ -16,16 +21,23 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+// Session middleware
+const sessionMiddleware = session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+});
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: process.env.NODE_ENV === 'production' }
-}));
+app.use(sessionMiddleware);
 
 // Initialize database
 async function initDB() {
@@ -138,14 +150,24 @@ app.get('/messages', async (req, res) => {
   }
 });
 
-// WebSocket
+// WebSocket - Share session with Socket.io
+io.engine.use(sessionMiddleware);
+
 io.on('connection', (socket) => {
-  console.log('User connected');
+  console.log('User connected:', socket.id);
   
-  socket.on('authenticate', (sessionData) => {
-    socket.userId = sessionData.userId;
-    socket.username = sessionData.username;
-  });
+  const session = socket.request.session;
+  
+  if (!session || !session.userId) {
+    console.log('Unauthorized socket connection');
+    socket.disconnect();
+    return;
+  }
+  
+  socket.userId = session.userId;
+  socket.username = session.username;
+  
+  console.log('Authenticated user:', socket.username);
   
   socket.on('send_message', async (data) => {
     if (!socket.userId) {
@@ -153,24 +175,28 @@ io.on('connection', (socket) => {
     }
     
     try {
-      await pool.query(
-        'INSERT INTO messages (user_id, username, message) VALUES ($1, $2, $3)',
+      const result = await pool.query(
+        'INSERT INTO messages (user_id, username, message) VALUES ($1, $2, $3) RETURNING *',
         [socket.userId, socket.username, data.message]
       );
       
+      const message = result.rows[0];
+      
       io.emit('new_message', {
-        username: socket.username,
-        message: data.message,
-        created_at: new Date()
+        username: message.username,
+        message: message.message,
+        created_at: message.created_at
       });
+      
+      console.log('Message sent:', message.username, message.message);
     } catch (error) {
-      console.error(error);
+      console.error('Error sending message:', error);
       socket.emit('error', { message: 'Failed to send message' });
     }
   });
   
   socket.on('disconnect', () => {
-    console.log('User disconnected');
+    console.log('User disconnected:', socket.username);
   });
 });
 

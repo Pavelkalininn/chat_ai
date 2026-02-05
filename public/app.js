@@ -104,10 +104,14 @@ messageInput.addEventListener('keypress', (e) => {
 function sendMessage() {
   const message = messageInput.value.trim();
   
-  if (message && socket) {
+  if (message && socket && socket.connected) {
+    console.log('Sending message:', message);
     socket.emit('send_message', { message });
     messageInput.value = '';
     messageInput.style.height = 'auto';
+  } else if (!socket || !socket.connected) {
+    console.error('Socket not connected');
+    alert('Нет подключения к серверу. Попробуйте обновить страницу.');
   }
 }
 
@@ -119,26 +123,61 @@ messageInput.addEventListener('input', function() {
 
 // Socket initialization
 function initSocket() {
-  socket = io();
+  socket = io({
+    transports: ['websocket', 'polling']
+  });
   
   socket.on('connect', () => {
-    console.log('Connected to server');
+    console.log('Connected to server, socket ID:', socket.id);
+    updateConnectionStatus(true);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Disconnected from server');
+    updateConnectionStatus(false);
+  });
+  
+  socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    updateConnectionStatus(false);
   });
   
   socket.on('new_message', (data) => {
+    console.log('New message received:', data);
     addMessage(data.username, data.message, data.created_at);
   });
   
   socket.on('error', (error) => {
     console.error('Socket error:', error);
+    alert('Ошибка: ' + error.message);
   });
+}
+
+function updateConnectionStatus(connected) {
+  const statusEl = document.getElementById('connectionStatus');
+  if (statusEl) {
+    if (connected) {
+      statusEl.textContent = '● Подключено';
+      statusEl.style.color = '#4caf50';
+    } else {
+      statusEl.textContent = '● Отключено';
+      statusEl.style.color = '#f44336';
+    }
+  }
 }
 
 // Load messages
 async function loadMessages() {
   try {
+    console.log('Loading messages...');
     const response = await fetch('/messages');
+    
+    if (!response.ok) {
+      throw new Error('Failed to load messages');
+    }
+    
     const messages = await response.json();
+    console.log('Loaded messages:', messages.length);
     
     messagesContainer.innerHTML = '';
     messages.forEach(msg => {
@@ -147,6 +186,7 @@ async function loadMessages() {
     scrollToBottom();
   } catch (error) {
     console.error('Failed to load messages:', error);
+    messagesContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Не удалось загрузить сообщения</div>';
   }
 }
 

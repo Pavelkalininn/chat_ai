@@ -351,7 +351,10 @@
     <div class="chat-container" id="chatContainer">
       <div class="chat-header">
         <div>👤 <span class="username" id="currentUsername"></span></div>
-        <button class="logout-btn" id="logoutBtn">Выйти</button>
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <div id="connectionStatus" style="font-size: 12px; color: #4caf50;">● Подключено</div>
+          <button class="logout-btn" id="logoutBtn">Выйти</button>
+        </div>
       </div>
       
       <div class="messages" id="messages"></div>
