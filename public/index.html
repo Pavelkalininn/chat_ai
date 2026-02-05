@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="description" content="Простой чат для общения">
+  <title>Чат</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+    }
+    
+    .container {
+      width: 100%;
+      max-width: 600px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 90vh;
+      max-height: 800px;
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+      }
+      
+      body {
+        padding: 0;
+      }
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .auth-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+    }
+    
+    .auth-form {
+      width: 100%;
+      max-width: 400px;
+    }
+    
+    .auth-form h2 {
+      margin-bottom: 30px;
+      color: #333;
+      text-align: center;
+      font-size: 28px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: #555;
+      font-weight: 500;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 10px;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #555;
+    }
+    
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+    
+    .error {
+      background: #fee;
+      color: #c33;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+      font-size: 14px;
+    }
+    
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      display: none;
+    }
+    
+    .chat-header {
+      background: #f8f9fa;
+      padding: 15px 20px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .chat-header .username {
+      font-weight: 600;
+      color: #667eea;
+    }
+    
+    .logout-btn {
+      padding: 8px 15px;
+      border: none;
+      border-radius: 6px;
+      background: #f44336;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    
+    .logout-btn:hover {
+      background: #da190b;
+    }
+    
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: #f8f9fa;
+    }
+    
+    .message {
+      margin-bottom: 15px;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .message .username {
+      font-weight: 600;
+      color: #667eea;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+    
+    .message .text {
+      background: white;
+      padding: 12px 15px;
+      border-radius: 12px;
+      word-wrap: break-word;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    
+    .message .time {
+      font-size: 11px;
+      color: #999;
+      margin-top: 5px;
+    }
+    
+    .message-input-container {
+      padding: 20px;
+      background: white;
+      border-top: 1px solid #e0e0e0;
+    }
+    
+    .message-input-wrapper {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .message-input {
+      flex: 1;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 25px;
+      font-size: 15px;
+      resize: none;
+      font-family: inherit;
+    }
+    
+    .message-input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .send-btn {
+      width: 50px;
+      height: 50px;
+      border: none;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    
+    .send-btn:hover {
+      transform: scale(1.1);
+    }
+    
+    .send-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+    
+    .toggle-auth {
+      text-align: center;
+      margin-top: 15px;
+      color: #666;
+      font-size: 14px;
+    }
+    
+    .toggle-auth a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .toggle-auth a:hover {
+      text-decoration: underline;
+    }
+
+    /* Scrollbar styling */
+    .messages::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .messages::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+
+    .messages::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+
+    .messages::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">💬 Чат</div>
+    
+    <!-- Auth Container -->
+    <div class="auth-container" id="authContainer">
+      <div class="auth-form">
+        <h2 id="authTitle">Вход</h2>
+        <div id="errorMessage" class="error hidden"></div>
+        
+        <form id="authForm">
+          <div class="form-group">
+            <label for="username">Логин</label>
+            <input type="text" id="username" required minlength="3" autocomplete="username">
+          </div>
+          
+          <div class="form-group">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" required minlength="6" autocomplete="current-password">
+          </div>
+          
+          <button type="submit" class="btn btn-primary" id="authButton">Войти</button>
+          <button type="button" class="btn btn-secondary" id="toggleAuthMode">Регистрация</button>
+        </form>
+        
+        <div class="toggle-auth">
+          <span id="toggleText">Нет аккаунта? <a id="toggleLink">Зарегистрируйтесь</a></span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Chat Container -->
+    <div class="chat-container" id="chatContainer">
+      <div class="chat-header">
+        <div>👤 <span class="username" id="currentUsername"></span></div>
+        <button class="logout-btn" id="logoutBtn">Выйти</button>
+      </div>
+      
+      <div class="messages" id="messages"></div>
+      
+      <div class="message-input-container">
+        <div class="message-input-wrapper">
+          <textarea class="message-input" id="messageInput" placeholder="Напишите сообщение..." rows="1"></textarea>
+          <button class="send-btn" id="sendBtn">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+  
+  <script>
+    // PWA Installation
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('Service Worker registered'))
+          .catch(err => console.log('Service Worker registration failed'));
+      });
+    }
+  </script>
+</body>
+</html>
