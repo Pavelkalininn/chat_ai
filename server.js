@@ -87,7 +87,11 @@ app.post('/register', async (req, res) => {
     
     req.session.userId = result.rows[0].id;
     req.session.username = result.rows[0].username;
-    res.json({ success: true, username: result.rows[0].username });
+    res.json({ 
+      success: true, 
+      username: result.rows[0].username,
+      userId: result.rows[0].id
+    });
   } catch (error) {
     if (error.code === '23505') {
       res.status(400).json({ error: 'Username already exists' });
@@ -117,7 +121,11 @@ app.post('/login', async (req, res) => {
     
     req.session.userId = user.id;
     req.session.username = user.username;
-    res.json({ success: true, username: user.username });
+    res.json({ 
+      success: true, 
+      username: user.username,
+      userId: user.id
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
@@ -158,7 +166,7 @@ app.get('/messages', async (req, res) => {
 });
 
 // WebSocket
-const connectedUsers = new Map(); // Track connected users
+const userSockets = new Map(); // Map userId to socket.id
 
 io.on('connection', (socket) => {
   console.log('Socket connected:', socket.id);
@@ -166,10 +174,21 @@ io.on('connection', (socket) => {
   // Wait for authentication
   socket.on('authenticate', (data) => {
     if (data && data.userId && data.username) {
+      // Disconnect previous socket for this user if exists
+      if (userSockets.has(data.userId)) {
+        const oldSocketId = userSockets.get(data.userId);
+        const oldSocket = io.sockets.sockets.get(oldSocketId);
+        if (oldSocket && oldSocket.id !== socket.id) {
+          console.log('Disconnecting old socket for user:', data.username);
+          oldSocket.disconnect(true);
+        }
+      }
+      
       socket.userId = data.userId;
       socket.username = data.username;
-      connectedUsers.set(socket.id, data.username);
-      console.log('User authenticated:', socket.username);
+      userSockets.set(data.userId, socket.id);
+      
+      console.log('User authenticated:', socket.username, 'socket:', socket.id);
       socket.emit('authenticated', { success: true });
     } else {
       socket.emit('auth_error', { message: 'Invalid authentication data' });
@@ -203,9 +222,12 @@ io.on('connection', (socket) => {
   });
   
   socket.on('disconnect', () => {
-    if (socket.username) {
+    if (socket.userId) {
       console.log('User disconnected:', socket.username);
-      connectedUsers.delete(socket.id);
+      // Only remove from map if this is the current socket for this user
+      if (userSockets.get(socket.userId) === socket.id) {
+        userSockets.delete(socket.userId);
+      }
     }
   });
 });

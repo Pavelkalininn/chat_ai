@@ -1,6 +1,7 @@
 let socket;
 let isLoginMode = true;
 let currentUser = null;
+let currentUserId = null; // Add userId storage
 
 // DOM Elements
 const authContainer = document.getElementById('authContainer');
@@ -42,6 +43,7 @@ authForm.addEventListener('submit', async (e) => {
     
     if (response.ok) {
       currentUser = data.username;
+      currentUserId = data.userId; // Store userId
       showChat();
       initSocket();
       loadMessages();
@@ -83,10 +85,19 @@ function toggleMode() {
 logoutBtn.addEventListener('click', async () => {
   try {
     await fetch('/logout', { method: 'POST' });
-    socket.disconnect();
+    
+    // Clean up socket
+    if (socket) {
+      socket.removeAllListeners();
+      socket.disconnect();
+      socket = null;
+    }
+    
+    socketAuthenticated = false;
     showAuth();
     messagesContainer.innerHTML = '';
     currentUser = null;
+    currentUserId = null;
   } catch (error) {
     console.error('Logout error:', error);
   }
@@ -104,15 +115,24 @@ messageInput.addEventListener('keypress', (e) => {
 function sendMessage() {
   const message = messageInput.value.trim();
   
-  if (message && socket && socket.connected) {
-    console.log('Sending message:', message);
-    socket.emit('send_message', { message });
-    messageInput.value = '';
-    messageInput.style.height = 'auto';
-  } else if (!socket || !socket.connected) {
+  if (!message) return;
+  
+  if (!socket || !socket.connected) {
     console.error('Socket not connected');
     alert('Нет подключения к серверу. Попробуйте обновить страницу.');
+    return;
   }
+  
+  if (!socketAuthenticated) {
+    console.error('Socket not authenticated');
+    alert('Идет подключение... Попробуйте еще раз через пару секунд.');
+    return;
+  }
+  
+  console.log('Sending message:', message);
+  socket.emit('send_message', { message });
+  messageInput.value = '';
+  messageInput.style.height = 'auto';
 }
 
 // Auto-resize textarea
@@ -122,24 +142,40 @@ messageInput.addEventListener('input', function() {
 });
 
 // Socket initialization
+let socketAuthenticated = false;
+
 function initSocket() {
+  // Prevent multiple socket connections
+  if (socket && socket.connected) {
+    console.log('Socket already connected');
+    return;
+  }
+  
+  // Clean up existing socket if any
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+  }
+  
   socket = io({
     transports: ['polling', 'websocket'],
-    upgrade: true
+    upgrade: true,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 5
   });
   
   socket.on('connect', () => {
     console.log('Connected to server, socket ID:', socket.id);
+    socketAuthenticated = false;
     
-    // Authenticate with current user data
-    if (currentUser) {
-      checkAuth().then(data => {
-        if (data && data.authenticated) {
-          socket.emit('authenticate', {
-            userId: data.userId,
-            username: data.username
-          });
-        }
+    // Authenticate immediately with stored credentials
+    if (currentUser && currentUserId) {
+      console.log('Authenticating with userId:', currentUserId, 'username:', currentUser);
+      socket.emit('authenticate', {
+        userId: currentUserId,
+        username: currentUser
       });
     }
     
@@ -148,15 +184,19 @@ function initSocket() {
   
   socket.on('authenticated', (data) => {
     console.log('Socket authenticated successfully');
+    socketAuthenticated = true;
+    updateConnectionStatus(true); // Update status after authentication
   });
   
   socket.on('auth_error', (error) => {
     console.error('Authentication error:', error);
+    socketAuthenticated = false;
     alert('Ошибка аутентификации. Попробуйте перезайти.');
   });
   
-  socket.on('disconnect', () => {
-    console.log('Disconnected from server');
+  socket.on('disconnect', (reason) => {
+    console.log('Disconnected from server, reason:', reason);
+    socketAuthenticated = false;
     updateConnectionStatus(false);
   });
   
@@ -179,9 +219,12 @@ function initSocket() {
 function updateConnectionStatus(connected) {
   const statusEl = document.getElementById('connectionStatus');
   if (statusEl) {
-    if (connected) {
+    if (connected && socketAuthenticated) {
       statusEl.textContent = '● Подключено';
       statusEl.style.color = '#4caf50';
+    } else if (connected) {
+      statusEl.textContent = '● Подключение...';
+      statusEl.style.color = '#ff9800';
     } else {
       statusEl.textContent = '● Отключено';
       statusEl.style.color = '#f44336';
@@ -275,6 +318,7 @@ async function checkAuth() {
     
     if (data.authenticated) {
       currentUser = data.username;
+      currentUserId = data.userId; // Store userId
       showChat();
       initSocket();
       loadMessages();
