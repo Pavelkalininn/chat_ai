@@ -124,12 +124,35 @@ messageInput.addEventListener('input', function() {
 // Socket initialization
 function initSocket() {
   socket = io({
-    transports: ['websocket', 'polling']
+    transports: ['polling', 'websocket'],
+    upgrade: true
   });
   
   socket.on('connect', () => {
     console.log('Connected to server, socket ID:', socket.id);
+    
+    // Authenticate with current user data
+    if (currentUser) {
+      checkAuth().then(data => {
+        if (data && data.authenticated) {
+          socket.emit('authenticate', {
+            userId: data.userId,
+            username: data.username
+          });
+        }
+      });
+    }
+    
     updateConnectionStatus(true);
+  });
+  
+  socket.on('authenticated', (data) => {
+    console.log('Socket authenticated successfully');
+  });
+  
+  socket.on('auth_error', (error) => {
+    console.error('Authentication error:', error);
+    alert('Ошибка аутентификации. Попробуйте перезайти.');
   });
   
   socket.on('disconnect', () => {
@@ -258,7 +281,10 @@ async function checkAuth() {
     } else {
       showAuth();
     }
+    
+    return data;
   } catch (error) {
     showAuth();
+    return { authenticated: false };
   }
 }

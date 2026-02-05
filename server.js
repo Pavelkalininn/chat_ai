@@ -12,7 +12,9 @@ const io = new Server(httpServer, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ['polling', 'websocket'],
+  allowEIO3: true
 });
 
 // Database connection
@@ -21,23 +23,24 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Session middleware
+// Session configuration
 const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
   resave: false,
   saveUninitialized: false,
   cookie: { 
-    secure: process.env.NODE_ENV === 'production',
+    secure: false, // Set to false to work with both HTTP and HTTPS
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax'
   }
 });
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
 app.use(sessionMiddleware);
+app.use(express.static('public'));
 
 // Initialize database
 async function initDB() {
@@ -128,7 +131,11 @@ app.post('/logout', (req, res) => {
 
 app.get('/check-auth', (req, res) => {
   if (req.session.userId) {
-    res.json({ authenticated: true, username: req.session.username });
+    res.json({ 
+      authenticated: true, 
+      username: req.session.username,
+      userId: req.session.userId
+    });
   } else {
     res.json({ authenticated: false });
   }
@@ -150,27 +157,27 @@ app.get('/messages', async (req, res) => {
   }
 });
 
-// WebSocket - Share session with Socket.io
-io.engine.use(sessionMiddleware);
+// WebSocket
+const connectedUsers = new Map(); // Track connected users
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  console.log('Socket connected:', socket.id);
   
-  const session = socket.request.session;
-  
-  if (!session || !session.userId) {
-    console.log('Unauthorized socket connection');
-    socket.disconnect();
-    return;
-  }
-  
-  socket.userId = session.userId;
-  socket.username = session.username;
-  
-  console.log('Authenticated user:', socket.username);
+  // Wait for authentication
+  socket.on('authenticate', (data) => {
+    if (data && data.userId && data.username) {
+      socket.userId = data.userId;
+      socket.username = data.username;
+      connectedUsers.set(socket.id, data.username);
+      console.log('User authenticated:', socket.username);
+      socket.emit('authenticated', { success: true });
+    } else {
+      socket.emit('auth_error', { message: 'Invalid authentication data' });
+    }
+  });
   
   socket.on('send_message', async (data) => {
-    if (!socket.userId) {
+    if (!socket.userId || !socket.username) {
       return socket.emit('error', { message: 'Not authenticated' });
     }
     
@@ -188,7 +195,7 @@ io.on('connection', (socket) => {
         created_at: message.created_at
       });
       
-      console.log('Message sent:', message.username, message.message);
+      console.log('Message sent by', message.username + ':', message.message);
     } catch (error) {
       console.error('Error sending message:', error);
       socket.emit('error', { message: 'Failed to send message' });
@@ -196,7 +203,10 @@ io.on('connection', (socket) => {
   });
   
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.username);
+    if (socket.username) {
+      console.log('User disconnected:', socket.username);
+      connectedUsers.delete(socket.id);
+    }
   });
 });
 
